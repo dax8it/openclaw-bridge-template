@@ -92,3 +92,7 @@ CLIENT_KEY_SHA="$(./scripts/bridge hash-key "$CLIENT_KEY")"
 
 - This is not legal advice. Verify your own platform terms and policies.
 - This template is intentionally local-first and transport-focused.
+
+## License
+
+MIT. See `LICENSE`.
