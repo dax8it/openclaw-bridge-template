@@ -32,6 +32,15 @@ A local bridge pattern with:
 
 This gives us deterministic local messaging without requiring provider credential sharing.
 
+## Security and operator clarity we added
+
+We also documented the operational side, not just the code:
+- a step-by-step bootstrap workflow (`point -> scan -> ingest -> build`),
+- platform-specific instruction packs (OpenAI/Codex, Claude, Gemini, others),
+- and a command safety reference that explains what each shell command does, what it changes, and whether it's read-only, local-change, or caution-level.
+
+That makes the project easier to audit before running commands, especially for teams with strict security reviews.
+
 ## Why this is better
 
 1. Reduced blast radius  
@@ -64,4 +73,5 @@ Start with a template repo that includes:
 - key provisioning + hash-based auth,
 - ACL routing,
 - smoke tests,
+- command-by-command safety documentation,
 - explicit documentation that provider OAuth/session credentials are out of scope for the bridge.
