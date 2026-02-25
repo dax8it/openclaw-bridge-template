@@ -1,0 +1,22 @@
+{
+  "socketPath": "/Users/Shared/openclaw_bridge/openclaw-bridge.sock",
+  "socketMode": "0660",
+  "httpHost": "127.0.0.1",
+  "httpPort": 8787,
+  "maxMessageBytes": 65536,
+  "queueLimit": 500,
+  "logFile": "/Users/Shared/openclaw_bridge/bridge.log",
+  "adminTokenSha256": "REPLACE_WITH_SHA256",
+  "clients": [
+    {
+      "id": "openclaw-server",
+      "keySha256": "REPLACE_WITH_SHA256",
+      "canSendTo": ["agent-client"]
+    },
+    {
+      "id": "agent-client",
+      "keySha256": "REPLACE_WITH_SHA256",
+      "canSendTo": ["openclaw-server"]
+    }
+  ]
+}

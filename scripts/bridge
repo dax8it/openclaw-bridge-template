@@ -1,0 +1,286 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+CONFIG_PATH="${OPENCLAW_BRIDGE_CONFIG:-$ROOT_DIR/bridge/config.json}"
+RUNTIME_DIR="$ROOT_DIR/bridge/runtime"
+PID_FILE="$RUNTIME_DIR/daemon.pid"
+OUT_FILE="$RUNTIME_DIR/daemon.out"
+
+mkdir -p "$RUNTIME_DIR"
+
+require_node() {
+  if ! command -v node >/dev/null 2>&1; then
+    echo "node is required"
+    exit 1
+  fi
+}
+
+config_read() {
+  local expr="$1"
+  node -e "const fs=require('fs');const cfg=JSON.parse(fs.readFileSync(process.argv[1],'utf8'));const out=${expr};if(out===undefined){process.exit(2)};process.stdout.write(String(out));" "$CONFIG_PATH"
+}
+
+resolve_socket_path() {
+  if [[ -n "${OPENCLAW_BRIDGE_SOCKET:-}" ]]; then
+    echo "$OPENCLAW_BRIDGE_SOCKET"
+    return
+  fi
+
+  if [[ -f "$CONFIG_PATH" ]]; then
+    config_read 'cfg.socketPath'
+    return
+  fi
+
+  echo "$ROOT_DIR/bridge/runtime/openclaw-bridge.sock"
+}
+
+is_running() {
+  if [[ ! -f "$PID_FILE" ]]; then
+    return 1
+  fi
+  local pid
+  pid="$(cat "$PID_FILE")"
+  if [[ -z "$pid" ]]; then
+    return 1
+  fi
+  ps -p "$pid" -o pid= >/dev/null 2>&1
+}
+
+can_signal_pid() {
+  local pid="$1"
+  [[ -n "$pid" ]] || return 1
+  kill -0 "$pid" >/dev/null 2>&1
+}
+
+pid_owner() {
+  local pid="$1"
+  ps -p "$pid" -o user= 2>/dev/null | tr -d ' ' || true
+}
+
+find_daemon_pid() {
+  ps -axo pid=,command= | awk '/bridge\/daemon\.js/ && $0 !~ /awk/ { print $1; exit }'
+}
+
+http_healthy() {
+  local host port
+  host="$(config_read 'cfg.httpHost')"
+  port="$(config_read 'cfg.httpPort')"
+  if command -v curl >/dev/null 2>&1; then
+    curl -fsS --max-time 1 "http://$host:$port/health" >/dev/null 2>&1
+    return $?
+  fi
+  return 1
+}
+
+cmd_init() {
+  if [[ -f "$CONFIG_PATH" ]]; then
+    echo "Config already exists: $CONFIG_PATH"
+    return
+  fi
+  cp "$ROOT_DIR/bridge/config.example.json" "$CONFIG_PATH"
+  echo "Created $CONFIG_PATH"
+  echo "Now run: $0 provision-secrets"
+}
+
+cmd_up() {
+  require_node
+  if [[ ! -f "$CONFIG_PATH" ]]; then
+    echo "Missing config: $CONFIG_PATH"
+    echo "Run: $0 init"
+    exit 1
+  fi
+  if is_running; then
+    echo "Bridge already running with PID $(cat "$PID_FILE")"
+    return
+  fi
+  if http_healthy; then
+    local existing_pid
+    existing_pid="$(find_daemon_pid || true)"
+    if [[ -n "$existing_pid" ]]; then
+      echo "$existing_pid" > "$PID_FILE"
+      echo "Bridge already running with PID $existing_pid"
+      return
+    fi
+  fi
+
+  rm -f "$PID_FILE"
+  nohup env OPENCLAW_BRIDGE_CONFIG="$CONFIG_PATH" node "$ROOT_DIR/bridge/daemon.js" >>"$OUT_FILE" 2>&1 &
+  echo $! > "$PID_FILE"
+  sleep 0.5
+
+  if is_running; then
+    echo "Bridge started (PID $(cat "$PID_FILE"))"
+    cmd_status
+  else
+    echo "Bridge failed to start. Recent logs:"
+    tail -n 50 "$OUT_FILE" || true
+    rm -f "$PID_FILE"
+    exit 1
+  fi
+}
+
+cmd_down() {
+  local pid
+  pid="$(cat "$PID_FILE" 2>/dev/null || true)"
+  if [[ -z "$pid" ]]; then
+    pid="$(find_daemon_pid || true)"
+  fi
+  if [[ -z "$pid" ]] || ! ps -p "$pid" -o pid= >/dev/null 2>&1; then
+    echo "Bridge not running"
+    rm -f "$PID_FILE"
+    return
+  fi
+
+  if can_signal_pid "$pid"; then
+    kill "$pid" >/dev/null 2>&1 || true
+    sleep 0.5
+    if ps -p "$pid" -o pid= >/dev/null 2>&1; then
+      kill -9 "$pid" >/dev/null 2>&1 || true
+    fi
+  fi
+
+  if ps -p "$pid" -o pid= >/dev/null 2>&1; then
+    echo "Bridge is still running (PID $pid, owner $(pid_owner "$pid"))."
+    return 1
+  fi
+
+  rm -f "$PID_FILE"
+  echo "Bridge stopped"
+}
+
+cmd_status() {
+  local socket host port
+  socket="$(config_read 'cfg.socketPath' 2>/dev/null || echo "$ROOT_DIR/bridge/runtime/openclaw-bridge.sock")"
+  host="$(config_read 'cfg.httpHost' 2>/dev/null || echo "127.0.0.1")"
+  port="$(config_read 'cfg.httpPort' 2>/dev/null || echo "8787")"
+
+  if ! is_running; then
+    local existing_pid
+    existing_pid="$(find_daemon_pid || true)"
+    if [[ -n "$existing_pid" ]]; then
+      echo "$existing_pid" > "$PID_FILE"
+    fi
+  fi
+
+  if is_running; then
+    local pid
+    pid="$(cat "$PID_FILE")"
+    echo "Bridge running"
+    echo "PID: $pid"
+    echo "Owner: $(pid_owner "$pid")"
+    echo "Socket: $socket"
+    echo "Panel: http://$host:$port/"
+    return
+  fi
+
+  if http_healthy; then
+    echo "Bridge running (detected via health endpoint)"
+    echo "PID: unknown"
+    echo "Socket: $socket"
+    echo "Panel: http://$host:$port/"
+  else
+    echo "Bridge not running"
+  fi
+}
+
+cmd_logs() {
+  touch "$OUT_FILE"
+  tail -n 120 -f "$OUT_FILE"
+}
+
+cmd_panel() {
+  local host port
+  host="$(config_read 'cfg.httpHost')"
+  port="$(config_read 'cfg.httpPort')"
+  echo "Control panel: http://$host:$port/"
+}
+
+cmd_hash_key() {
+  require_node
+  if [[ $# -ne 1 ]]; then
+    echo "Usage: $0 hash-key <plain-key>"
+    exit 1
+  fi
+  node "$ROOT_DIR/bridge/hash-key.js" "$1"
+}
+
+cmd_provision_secrets() {
+  require_node
+  OPENCLAW_BRIDGE_CONFIG="$CONFIG_PATH" node "$ROOT_DIR/bridge/provision-secrets.js"
+}
+
+cmd_secrets() {
+  require_node
+  node "$ROOT_DIR/bridge/read-secrets.js" "$@"
+}
+
+cmd_send() {
+  require_node
+  local socket_path
+  socket_path="$(resolve_socket_path)"
+  OPENCLAW_BRIDGE_SOCKET="$socket_path" node "$ROOT_DIR/bridge/client.js" send "$@"
+}
+
+cmd_listen() {
+  require_node
+  local socket_path
+  socket_path="$(resolve_socket_path)"
+  OPENCLAW_BRIDGE_SOCKET="$socket_path" node "$ROOT_DIR/bridge/client.js" listen "$@"
+}
+
+cmd_whoami() {
+  require_node
+  local socket_path
+  socket_path="$(resolve_socket_path)"
+  OPENCLAW_BRIDGE_SOCKET="$socket_path" node "$ROOT_DIR/bridge/client.js" whoami "$@"
+}
+
+cmd_smoke_two_way() {
+  "$ROOT_DIR/scripts/smoke-two-way.sh"
+}
+
+main() {
+  local cmd="${1:-help}"
+  shift || true
+
+  case "$cmd" in
+    init) cmd_init "$@" ;;
+    up) cmd_up "$@" ;;
+    down) cmd_down "$@" ;;
+    restart) cmd_down; cmd_up ;;
+    status) cmd_status "$@" ;;
+    logs) cmd_logs ;;
+    panel) cmd_panel ;;
+    hash-key) cmd_hash_key "$@" ;;
+    provision-secrets) cmd_provision_secrets ;;
+    secrets) cmd_secrets "$@" ;;
+    send) cmd_send "$@" ;;
+    listen) cmd_listen "$@" ;;
+    whoami) cmd_whoami "$@" ;;
+    smoke-two-way) cmd_smoke_two_way ;;
+    *)
+      cat <<USAGE
+Usage: $0 <command>
+
+Commands:
+  init               Create bridge/config.json from example
+  up                 Start daemon in background
+  down               Stop daemon
+  restart            Restart daemon
+  status             Show daemon status
+  logs               Tail daemon logs
+  panel              Print control panel URL
+  hash-key <key>     Print SHA-256 hash
+  provision-secrets  Generate admin/client secrets and write hashes
+  secrets ...        Read generated secrets
+  send ...           Proxy to bridge/client.js send
+  listen ...         Proxy to bridge/client.js listen
+  whoami ...         Proxy to bridge/client.js whoami
+  smoke-two-way      Verify bridge works in both directions
+USAGE
+      ;;
+  esac
+}
+
+main "$@"

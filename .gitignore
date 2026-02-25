@@ -1,0 +1,12 @@
+# Local runtime artifacts
+bridge/runtime/*.out
+bridge/runtime/*.pid
+bridge/runtime/*.log
+bridge/runtime/*.sock
+bridge/runtime/generated-secrets.json
+
+# Local config with environment-specific hashes/tokens
+bridge/config.json
+
+# macOS
+.DS_Store
