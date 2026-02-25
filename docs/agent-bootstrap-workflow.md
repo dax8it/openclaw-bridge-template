@@ -2,6 +2,9 @@
 
 Use this workflow when you want an external agent (Codex/Claude/Gemini/other) to safely build and operate an OpenClaw bridge in its own environment.
 
+Before running anything, review:
+- `docs/command-safety-reference.md`
+
 ## 1) Point the agent at this repo
 
 Clone locally:

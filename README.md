@@ -5,6 +5,7 @@ Local, OAuth-safe IPC bridge for OpenClaw and external agents.
 This template helps you run multi-agent workflows while keeping provider credentials (OpenAI/Anthropic/Google/etc.) inside each platform's own app/harness.
 
 New users: start with `docs/agent-bootstrap-workflow.md` for a step-by-step flow to point an agent at this repo, scan it for safety, ingest instructions, and build.
+Security-first users: review `docs/command-safety-reference.md` before running commands.
 
 ## What this gives you
 
