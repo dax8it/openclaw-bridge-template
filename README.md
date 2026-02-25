@@ -22,6 +22,7 @@ This template helps you run multi-agent workflows while keeping provider credent
 - `scripts/setup-macos-acl.sh` - optional shared-group ACL helper for cross-user setup
 - `docs/` - security, ToS boundary, onboarding, troubleshooting, and X article draft
   - includes platform-specific instruction blocks for OpenAI/Codex, Claude, Gemini, and other runtimes
+  - includes optional extension guidance for responder/listener/worker services
 
 ## Quick start
 
@@ -84,6 +85,7 @@ CLIENT_KEY_SHA="$(./scripts/bridge hash-key "$CLIENT_KEY")"
 4. Give only `CLIENT_ID` + `CLIENT_KEY` to that local agent harness.
 
 For copy/paste instruction blocks by platform, see `docs/agent-instructions-by-platform.md`.
+For optional worker/listener/responder extensions, see `docs/optional-services-extensions.md`.
 
 ## Safety rules
 
