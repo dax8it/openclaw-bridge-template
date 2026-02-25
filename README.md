@@ -4,6 +4,32 @@ Local, OAuth-safe IPC bridge for OpenClaw and external agents.
 
 This template helps you run multi-agent workflows while keeping provider credentials (OpenAI/Anthropic/Google/etc.) inside each platform's own app/harness.
 
+## What this gives you
+
+In plain language, this project creates a local messaging layer between:
+- your OpenClaw agents
+- your external agents (Codex, Claude, Gemini, or others)
+
+After setup, your external agents can:
+- send structured requests to OpenClaw agents
+- receive structured responses back from OpenClaw agents
+- stay within a safer auth boundary where provider OAuth/session credentials are never handed to OpenClaw
+
+Think of this as a local "router" for agent-to-agent communication on your machine.
+
+## What this is not
+
+- Not a replacement for provider login or account auth in each agent platform.
+- Not a cloud relay by default (it is local-first).
+- Not legal advice. You still need to verify terms/policies for your own platform usage.
+
+## Communication flow
+
+1. External agent authenticates to bridge with bridge-specific client key.
+2. External agent sends message to an allowlisted OpenClaw target.
+3. OpenClaw-side client receives and processes the message.
+4. Response returns through the same bridge channel.
+
 ## Core idea
 
 - Bridge auth: local client keys only (hashed in config).
