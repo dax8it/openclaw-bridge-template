@@ -60,6 +60,9 @@ Each client gets only the destinations it needs.
 - It is not legal advice.
 - Each team still needs to validate its own ToS/policy requirements.
 - Payload hygiene still matters: do not place secrets in payloads or logs.
+- Provider policies can change at any time.
+- We cannot guarantee future provider treatment of agent-to-agent communication.
+- Future rules could become stricter (including stronger agent segregation requirements).
 
 ## The outcome
 
